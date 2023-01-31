@@ -4,7 +4,7 @@ import argparse
 from natsort import natsorted
 from pathlib import Path
 from math import ceil
-from typing import List
+from typing import List, Any
 from dash import Dash, html, Input, Output, State, ALL
 import dash_bootstrap_components as dbc
 import flask
@@ -24,10 +24,7 @@ def get_filter_matches(filter: str) -> List[str]:
 app = Dash(
     __name__,
     prevent_initial_callbacks=True,
-    external_stylesheets=[
-        dbc.themes.ZEPHYR,
-        dbc.icons.BOOTSTRAP
-    ]
+    external_stylesheets=[dbc.themes.ZEPHYR, dbc.icons.BOOTSTRAP],
 )
 
 app.layout = create_layout(app)
@@ -39,7 +36,7 @@ app.title = "sinc"
     Input("num_columns", "value"),
     State("filters", "children"),
 )
-def update_filter_controls(num_columns, gallery):
+def update_filter_controls(num_columns: int, gallery: List[Any]) -> List[Any]:
     if num_columns < len(gallery):
         gallery = gallery[:num_columns]
     else:
@@ -53,9 +50,11 @@ def update_filter_controls(num_columns, gallery):
     Output("file_matches", "data"),
     Output({"type": "num_images", "index": ALL}, "children"),
     Input({"type": "filter", "index": ALL}, "value"),
-    Input("refresh_button", "n_clicks")
+    Input("refresh_button", "n_clicks"),
 )
-def update_file_matches(filters: List[str], refresh_clicks: int):
+def update_file_matches(
+    filters: List[str], refresh_clicks: int
+) -> List[List[str]]:
     matches = [
         get_filter_matches(filter) if filter is not None else []
         for filter in filters
@@ -67,9 +66,9 @@ def update_file_matches(filters: List[str], refresh_clicks: int):
 @app.callback(
     Output("pagination", "max_value"),
     Input("file_matches", "data"),
-    Input("num_per_page", "value")
+    Input("num_per_page", "value"),
 )
-def update_pagination(file_matches: List[str], num_per_page: int):
+def update_pagination(file_matches: List[str], num_per_page: int) -> int:
     file_counts = [len(x) for x in file_matches]
     max_files = max(file_counts)
     return max(ceil(max_files / num_per_page), 1)
@@ -79,13 +78,20 @@ def update_pagination(file_matches: List[str], num_per_page: int):
     Output("images", "children"),
     Input("file_matches", "data"),
     Input("pagination", "active_page"),
-    Input("num_per_page", "value")
+    Input("num_per_page", "value"),
 )
 def update_images(
-    file_matches: List[str],
-    active_page: int,
-    num_per_page: int
-):
+    file_matches: List[str], active_page: int, num_per_page: int
+) -> List[Any]:
+    def make_figure(src: str, caption: str) -> html.Figure:
+        return html.Figure(
+            className="figure",
+            children=[
+                html.Figcaption(caption, className="figure-caption"),
+                html.Img(src=src, className="figure-img img-fluid"),
+            ],
+        )
+
     i_start = (active_page - 1) * num_per_page
     i_end = i_start + num_per_page
 
@@ -97,14 +103,10 @@ def update_images(
         cols = []
         for col in range(len(file_matches)):
             if row < len(paths[col]):
-                img_src = "/images/" + os.path.relpath(paths[col][row], IMAGES_FOLDER)
-                elem = html.Figure(
-                    className="figure",
-                    children=[
-                        html.Figcaption(paths[col][row], className="figure-caption"),
-                        html.Img(src=img_src, className="figure-img img-fluid")
-                    ]
+                img_src = "/images/" + os.path.relpath(
+                    paths[col][row], IMAGES_FOLDER
                 )
+                elem = make_figure(img_src, paths[col][row])
             else:
                 elem = html.Div()
             cols.append(dbc.Col(elem))
@@ -121,16 +123,13 @@ app.clientside_callback(
     }
     """,
     Output("pagination", "active_page"),
-    Input("pagination", "active_page")
+    Input("pagination", "active_page"),
 )
 
 
 @app.server.route("/images/<path:filename>")
 def get_image(filename):
-    return flask.send_from_directory(
-        directory=IMAGES_FOLDER,
-        path=filename
-    )
+    return flask.send_from_directory(directory=IMAGES_FOLDER, path=filename)
 
 
 if __name__ == "__main__":
